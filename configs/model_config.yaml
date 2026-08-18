@@ -1,0 +1,13 @@
+model:
+  elasticity_prior_mean: -2.0
+  elasticity_prior_std: 1.0
+  forecast_horizon: 7
+  min_price: 5.0
+  max_price: 50.0
+  max_daily_price_change_pct: 0.20
+
+business_rules:
+  break_even_price: 8.0
+  competitor_weight: 0.3
+  weather_sensitivity: 10.0
+  weekend_multiplier: 1.2
