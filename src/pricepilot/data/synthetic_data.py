@@ -111,26 +111,40 @@ class CarWashDataGenerator:
             {
                 "date": dates,
                 "price": prices,
-                "quantity_sold": demand.astype(int),
+                "quantity_sold": demand.astype(np.int64),  # Force int64
                 "revenue": revenue,
                 "is_raining": weather["is_raining"],
                 "is_sunny": weather["is_sunny"],
                 "temperature": weather["temperature"],
-                "day_of_week": dates.dayofweek,
+                "day_of_week": dates.dayofweek.astype(np.int64),  # Force int64
                 "is_weekend": dates.dayofweek >= 5,
-                "month": dates.month,
-                "year": dates.year,
+                "month": dates.month.astype(np.int64),  # Force int64
+                "year": dates.year.astype(np.int64),  # Force int64
             }
         )
 
         return df
 
     def save(self, df: pd.DataFrame, filepath: str | Path) -> None:
-        """Save dataframe to CSV, creating directories if needed"""
+        """Save dataframe to CSV or parquet, creating directories if needed"""
         filepath = Path(filepath)
         # Create parent directories if they don't exist
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(filepath, index=False)
+
+        # Save based on file extension
+        if filepath.suffix.lower() == ".parquet":
+            # Parquet preserves all dtypes
+            df.to_parquet(filepath, index=False)
+        elif filepath.suffix.lower() == ".csv":
+            # For CSV, ensure all integer columns are int64
+            # (CSV doesn't preserve int32 vs int64)
+            df_csv = df.copy()
+            for col in df_csv.select_dtypes(include=["int32"]).columns:
+                df_csv[col] = df_csv[col].astype("int64")
+            df_csv.to_csv(filepath, index=False)
+        else:
+            # Default to CSV if unknown extension
+            df.to_csv(filepath, index=False)
 
     def generate_and_save(self, filepath: str | Path) -> pd.DataFrame:
         """Generate data and save to file"""
