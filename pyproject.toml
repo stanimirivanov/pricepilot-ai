@@ -28,6 +28,7 @@ dependencies = [
     "scipy>=1.17.1",
     "statsforecast>=2.0.1",
     "tqdm>=4.70.0",
+    "typer>=0.27.1",
     "uvicorn[standard]>=0.52.3",
 ]
 
@@ -49,6 +50,9 @@ pricepilot = "pricepilot.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pricepilot"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/pricepilot/py.typed" = "pricepilot/py.typed"
 
 [tool.ruff]
 line-length = 100
