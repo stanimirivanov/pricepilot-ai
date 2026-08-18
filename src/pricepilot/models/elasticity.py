@@ -20,7 +20,7 @@ class ElasticityResults:
     hdi_95: tuple[float, float]
     rhat: float
     effective_sample_size: float
-    trace: Any  # InferenceData object
+    trace: Any
 
     def summary(self) -> dict[str, float]:
         """Return summary statistics"""
@@ -63,7 +63,6 @@ class PriceElasticityModel:
         if self.trace is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
-        # Use getattr to access posterior group
         posterior = getattr(self.trace, "posterior", None)
         if posterior is None:
             raise ValueError("No posterior group found in trace")
@@ -78,6 +77,17 @@ class PriceElasticityModel:
             raise ValueError(f"Variable '{var_name}' not found in posterior")
 
         return cast(DataArray, posterior[var_name])
+
+    def _safe_float(self, value: Any) -> float:
+        """Safely convert various types to float"""
+        if isinstance(value, (float, int, np.floating, np.integer)):
+            return float(value)
+        elif isinstance(value, DataArray):
+            return float(value.item())
+        elif hasattr(value, "values"):
+            return float(np.asarray(value.values).flatten()[0])
+        else:
+            return float(value)
 
     def build_model(
         self,
@@ -111,6 +121,55 @@ class PriceElasticityModel:
         self.model = model
         return model
 
+    def _calculate_hdi_directly(
+        self, samples: np.ndarray, interval: float = 0.95
+    ) -> tuple[float, float]:
+        """Calculate HDI directly from posterior samples"""
+        sorted_samples = np.sort(samples)
+        n_samples = len(sorted_samples)
+
+        interval_samples = int(np.floor(interval * n_samples))
+
+        min_width = np.inf
+        hdi_min = sorted_samples[0]
+        hdi_max = sorted_samples[-1]
+
+        for i in range(n_samples - interval_samples):
+            width = sorted_samples[i + interval_samples] - sorted_samples[i]
+            if width < min_width:
+                min_width = width
+                hdi_min = sorted_samples[i]
+                hdi_max = sorted_samples[i + interval_samples]
+
+        return float(hdi_min), float(hdi_max)
+
+    def _extract_scalar(self, value: Any, var_name: str = "beta_price") -> float:
+        """Extract scalar value from various return types"""
+        if isinstance(value, (float, int, np.floating, np.integer)):
+            return float(value)
+
+        if isinstance(value, DataArray):
+            return float(value.item())
+
+        if isinstance(value, Dataset):
+            if var_name in value.data_vars:
+                return float(value[var_name].item())
+            if len(value.data_vars) > 0:
+                first_var = list(value.data_vars)[0]
+                return float(value[first_var].item())
+            return float(value.to_array().values.flatten()[0])
+
+        if isinstance(value, np.ndarray):
+            return float(value.flatten()[0])
+
+        if hasattr(value, "item"):
+            try:
+                return float(value.item())
+            except:
+                pass
+
+        return float(value)
+
     def fit(
         self,
         prices: np.ndarray,
@@ -137,20 +196,21 @@ class PriceElasticityModel:
         beta_price_da = self._extract_variable("beta_price")
         beta_price_posterior = beta_price_da.values.flatten()
 
-        # Calculate HDI
-        hdi = az.hdi(beta_price_da, hdi_prob=0.95)
+        # Calculate HDI directly (more reliable)
+        hdi_lower, hdi_upper = self._calculate_hdi_directly(beta_price_posterior)
 
         # Calculate convergence diagnostics
-        rhat_da = cast(DataArray, az.rhat(beta_price_da))
-        ess_da = cast(DataArray, az.ess(beta_price_da))
+        rhat_result = az.rhat(beta_price_da)
+        ess_result = az.ess(beta_price_da)
 
-        rhat_value = float(rhat_da.values)
-        ess_value = float(ess_da.values)
+        # Extract scalar values
+        rhat_value = self._extract_scalar(rhat_result, "beta_price")
+        ess_value = self._extract_scalar(ess_result, "beta_price")
 
         self.results = ElasticityResults(
             posterior_mean=float(np.mean(beta_price_posterior)),
             posterior_std=float(np.std(beta_price_posterior)),
-            hdi_95=(float(hdi[0]), float(hdi[1])),
+            hdi_95=(hdi_lower, hdi_upper),
             rhat=rhat_value,
             effective_sample_size=ess_value,
             trace=self.trace,
@@ -167,7 +227,6 @@ class PriceElasticityModel:
         if self.trace is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
-        # Create figure with 2 subplots side by side
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
         # Posterior distribution
@@ -178,7 +237,7 @@ class PriceElasticityModel:
         )
         axes[0].set_title("Price Elasticity Posterior Distribution")
 
-        # Forest plot (shows posterior intervals)
+        # Forest plot
         az.plot_forest(
             self.trace,
             var_names=["beta_price", "alpha", "sigma"],
@@ -199,13 +258,11 @@ class PriceElasticityModel:
         if self.trace is None:
             raise ValueError("Model not fitted. Call fit() first.")
 
-        # Trace plot creates its own figure
         axes = az.plot_trace(
             self.trace,
             var_names=["beta_price", "alpha"],
         )
 
-        # Get the figure from the axes
         fig = axes[0][0].figure
         fig.suptitle("MCMC Trace and Posterior Distributions", fontsize=14, y=1.02)
         fig.tight_layout()
