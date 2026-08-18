@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -49,7 +51,7 @@ class CarWashDataGenerator:
             }
         )
 
-    def generate_prices(self, n_days: int) -> np.ndarray:
+    def generate_prices(self, n_days: int) -> NDArray[np.float64]:
         """Generate price history with some variation"""
         base_price = self.config.base_price
         # Random walk around base price
@@ -59,7 +61,9 @@ class CarWashDataGenerator:
         prices = np.clip(prices, base_price * 0.7, base_price * 1.3)
         return prices
 
-    def calculate_demand(self, prices: np.ndarray, weather: pd.DataFrame) -> np.ndarray:
+    def calculate_demand(
+        self, prices: NDArray[np.float64], weather: pd.DataFrame
+    ) -> NDArray[np.float64]:
         """Calculate demand based on price and weather"""
         # Base demand
         demand = 100.0
@@ -67,15 +71,16 @@ class CarWashDataGenerator:
         # Price effect
         price_effect = self.config.price_elasticity * (prices - self.config.base_price)
 
-        # Weather effect
-        weather_effect = self.config.weather_sensitivity * weather["is_sunny"].values
+        # Weather effect - explicitly convert to numpy array with proper type
+        is_sunny = weather["is_sunny"].to_numpy(dtype=bool)
+        weather_effect = self.config.weather_sensitivity * is_sunny.astype(np.float64)
 
-        # Day of week effect
-        day_of_week = weather["date"].dt.dayofweek.values
+        # Day of week effect - let Pylance infer the type
+        day_of_week = weather["date"].dt.dayofweek.to_numpy()
         weekend_effect = np.where(
             day_of_week >= 5,  # Saturday=5, Sunday=6
             self.config.weekend_multiplier * 10,
-            0,
+            0.0,
         )
 
         # Combine effects
@@ -120,11 +125,14 @@ class CarWashDataGenerator:
 
         return df
 
-    def save(self, df: pd.DataFrame, filepath: str) -> None:
-        """Save dataframe to CSV"""
+    def save(self, df: pd.DataFrame, filepath: str | Path) -> None:
+        """Save dataframe to CSV, creating directories if needed"""
+        filepath = Path(filepath)
+        # Create parent directories if they don't exist
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(filepath, index=False)
 
-    def generate_and_save(self, filepath: str) -> pd.DataFrame:
+    def generate_and_save(self, filepath: str | Path) -> pd.DataFrame:
         """Generate data and save to file"""
         df = self.generate()
         self.save(df, filepath)
