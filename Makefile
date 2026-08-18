@@ -1,4 +1,4 @@
-.PHONY: setup install dev test lint format generate-data pipeline clean docker-build docker-run
+.PHONY: setup install dev test lint format typecheck generate-data pipeline check-mlflow clean docker-build docker-run
 
 # Setup project
 setup:
@@ -8,6 +8,10 @@ setup:
 # Install dependencies
 install:
 	uv sync
+
+# Check MLflow installation
+check-mlflow:
+	uv run python scripts/check_mlflow.py
 
 # Run development server
 dev:
@@ -28,21 +32,26 @@ format:
 	uv run ruff check --fix src tests
 	uv run ruff format src tests
 
+# Type checking
+typecheck:
+	uv run mypy src/
+
 # Generate synthetic data
 generate-data:
 	uv run python scripts/generate_data.py
 
 # Run pipeline
-pipeline:
-	uv run python scripts/run_pipeline.py
+pipeline: check-mlflow
+	uv run python scripts/run_phase1_pipeline.py
+
+# Run mlflow
+mlflow:
+	uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 # Clean up
 clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name ".mypy_cache" -exec rm -rf {} +
-	find . -type d -name ".ruff_cache" -exec rm -rf {} +
-	rm -rf .coverage htmlcov
+	uv cache clean
+	uv run python scripts/clean.py
 
 # Docker
 docker-build:

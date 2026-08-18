@@ -1,8 +1,7 @@
-import os
-import tempfile
+import io
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 import mlflow
 import pandas as pd
@@ -60,15 +59,24 @@ class MLflowTracker:
         mlflow.log_metrics(metrics)
 
     def log_dataframe(self, df: pd.DataFrame, name: str) -> None:
-        """Log dataframe as artifact"""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
-            df.to_csv(f.name, index=False)
-            mlflow.log_artifact(f.name, name)
-            os.unlink(f.name)
+        """Log dataframe as artifact using StringIO"""
+        # Ensure name has .csv extension for log_text
+        if not name.endswith(".csv"):
+            name = f"{name}.csv"
+
+        # Create CSV in memory
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False)
+
+        # Log as text artifact
+        mlflow.log_text(csv_buffer.getvalue(), name)
+        logger.debug(f"Logged dataframe '{name}' as CSV artifact")
 
     def log_model(self, model: Any, name: str) -> None:
         """Log model artifact"""
-        mlflow.sklearn.log_model(model, name)
+        from mlflow.sklearn import log_model as sklearn_log_model
+
+        sklearn_log_model(model, name)
 
     def get_experiment_id(self) -> str:
         """Get current experiment ID (guaranteed to exist)"""
@@ -85,9 +93,8 @@ class MLflowTracker:
             experiment_ids=[experiment_id],
             max_results=max_results,
             order_by=["start_time DESC"],
-            output_format="pandas",
+            output_format="pandas",  # Explicitly request pandas DataFrame
         )
 
-        # Type narrowing with assert
-        assert isinstance(runs_df, pd.DataFrame), "MLflow did not return a DataFrame"
-        return runs_df
+        # Use cast to tell type checker this is definitely a DataFrame
+        return cast(pd.DataFrame, runs_df)
