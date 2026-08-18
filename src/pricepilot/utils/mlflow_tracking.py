@@ -1,5 +1,6 @@
 import os
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -21,7 +22,9 @@ class MLflowTracker:
         self.client = MlflowClient()
 
     @contextmanager
-    def start_run(self, run_name: str, tags: dict[str, str] | None = None):
+    def start_run(
+        self, run_name: str, tags: dict[str, str] | None = None
+    ) -> Generator[Any, None, None]:
         """Context manager for MLflow runs"""
         with mlflow.start_run(run_name=run_name) as run:
             # Set default tags
@@ -57,16 +60,30 @@ class MLflowTracker:
         """Log model artifact"""
         mlflow.sklearn.log_model(model, name)
 
-    def get_experiment_id(self) -> str:
+    def get_experiment_id(self) -> str | None:
         """Get current experiment ID"""
         experiment = mlflow.get_experiment_by_name(self.settings.mlflow_experiment_name)
-        return experiment.experiment_id if experiment else None
+        if experiment is None:
+            logger.warning(f"Experiment '{self.settings.mlflow_experiment_name}' not found")
+            return None
+        return str(experiment.experiment_id)
 
     def list_runs(self, max_results: int = 10) -> pd.DataFrame:
         """List recent runs"""
+        experiment_id = self.get_experiment_id()
+        if experiment_id is None:
+            logger.warning("No experiment ID found, returning empty DataFrame")
+            return pd.DataFrame()
+
         runs = mlflow.search_runs(
-            experiment_ids=[self.get_experiment_id()],
+            experiment_ids=[experiment_id],
             max_results=max_results,
             order_by=["start_time DESC"],
         )
-        return runs
+
+        # Ensure we return a DataFrame
+        if isinstance(runs, pd.DataFrame):
+            return runs
+        else:
+            # Convert list of Run objects to DataFrame
+            return pd.DataFrame([run.to_dictionary() for run in runs])
