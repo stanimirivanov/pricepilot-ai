@@ -1,4 +1,4 @@
-.PHONY: setup install dev test lint format run clean
+.PHONY: setup install dev test lint format generate-data pipeline clean docker-build docker-run
 
 # Setup project
 setup:
@@ -17,16 +17,16 @@ dev:
 test:
 	uv run pytest tests/ -v --cov=src/pricepilot --cov-report=term-missing
 
-# Run linting
+# Run linting and type checking
 lint:
-	uv run black src tests
-	uv run isort src tests
+	uv run ruff check src tests
+	uv run ruff format --check src tests
 	uv run mypy src
 
-# Format code
+# Format code and sort imports
 format:
-	uv run black src tests
-	uv run isort src tests
+	uv run ruff check --fix src tests
+	uv run ruff format src tests
 
 # Generate synthetic data
 generate-data:
