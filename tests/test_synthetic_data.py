@@ -77,11 +77,40 @@ def test_non_negative_demand(generator):
     assert (df["quantity_sold"] >= 0).all()
 
 
-def test_save_and_load(generator, tmp_path):
-    """Test saving and loading data"""
+def test_save_and_load_csv(generator, tmp_path):
+    """Test saving and loading CSV data"""
     filepath = tmp_path / "test_data.csv"
     df = generator.generate_and_save(str(filepath))
 
-    # Load and verify
-    loaded_df = pd.read_csv(filepath)
+    # Load with date parsing and explicit dtypes
+    loaded_df = pd.read_csv(
+        filepath,
+        parse_dates=["date"],
+        dtype={
+            "quantity_sold": "int64",
+            "day_of_week": "int64",
+            "month": "int64",
+            "year": "int64",
+            "is_weekend": "bool",
+        },
+    )
+
+    # For CSV comparison, convert int64 to int32 if needed
+    # (or just check if the data is equivalent)
+    pd.testing.assert_frame_equal(
+        df,
+        loaded_df,
+        check_dtype=False,  # Don't check dtypes for CSV round-trip
+    )
+
+
+def test_save_and_load_parquet(generator, tmp_path):
+    """Test saving and loading parquet data (preserves types exactly)"""
+    filepath = tmp_path / "test_data.parquet"
+    df = generator.generate_and_save(filepath)
+
+    # Load parquet (types are automatically preserved)
+    loaded_df = pd.read_parquet(filepath)
+
+    # Verify dataframes are exactly equal
     pd.testing.assert_frame_equal(df, loaded_df)
