@@ -148,7 +148,7 @@ class UncertaintyQuantifier:
         Returns:
             Empirical coverage (should be close to 1 - alpha)
         """
-        predictions = self.predict(X_test)
+        predictions = self.predict(x_test)
         coverage = predictions.coverage(y_test)
 
         logger.info(f"Empirical coverage: {coverage:.3f} (expected: {self.confidence_level:.3f})")
@@ -167,7 +167,7 @@ class UncertaintyQuantifier:
         Returns:
             Dictionary with width statistics
         """
-        predictions = self.predict(X)
+        predictions = self.predict(x)
         widths = predictions.width()
 
         return {
