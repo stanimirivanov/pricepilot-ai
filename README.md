@@ -160,6 +160,10 @@ pytest --cov=src/pricepilot --cov-report=html
 pytest tests/test_elasticity.py -v
 ```
 
+## Notebooks
+
+* [Mathematical Proof](docs/01-math-proof-notebook.md)
+
 ## Configuration
 Configuration is managed through environment variables and YAML files:
 
