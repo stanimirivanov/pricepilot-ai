@@ -1,11 +1,12 @@
 """Anomaly detection for demand patterns using PyOD"""
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import pandas as pd
 from loguru import logger
+
+# PyOD 3.x imports
 from pyod.models.iforest import IForest
 from pyod.models.knn import KNN
 from pyod.models.lof import LOF
@@ -115,11 +116,32 @@ class DemandAnomalyDetector:
         # Current value
         features.append(demand)
 
-        # Rolling statistics
+        # Rolling statistics with NaN handling
         for window in [3, 7, 14]:
             if n >= window:
-                rolling_mean = pd.Series(demand).rolling(window=window, min_periods=1).mean().values
-                rolling_std = pd.Series(demand).rolling(window=window, min_periods=1).std().values
+                rolling_mean = (
+                    pd.Series(demand)
+                    .rolling(
+                        window=window,
+                        min_periods=1,  # Prevents NaN
+                    )
+                    .mean()
+                    .values
+                )
+
+                rolling_std = (
+                    pd.Series(demand)
+                    .rolling(
+                        window=window,
+                        min_periods=1,  # Prevents NaN
+                    )
+                    .std()
+                    .values
+                )
+
+                # Fill any remaining NaN (first element)
+                rolling_std = np.nan_to_num(rolling_std, nan=0.0)
+
                 features.append(rolling_mean)
                 features.append(rolling_std)
 
@@ -137,7 +159,11 @@ class DemandAnomalyDetector:
             day_of_week = np.arange(n) % 7
             features.append(day_of_week.astype(float))
 
-        return np.column_stack(features)
+        # Stack features and handle any remaining NaN
+        feature_matrix = np.column_stack(features)
+        feature_matrix = np.nan_to_num(feature_matrix, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return feature_matrix
 
     def fit(self, demand: np.ndarray) -> "DemandAnomalyDetector":
         """
