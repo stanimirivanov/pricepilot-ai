@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from loguru import logger
-from pyod.models.isolation_forest import IsolationForest
+from pyod.models.iforest import IForest
 from pyod.models.knn import KNN
 from pyod.models.lof import LOF
 from sklearn.preprocessing import StandardScaler
@@ -74,7 +74,7 @@ class DemandAnomalyDetector:
     def _create_detector(self, detector_type: str, contamination: float):
         """Create PyOD detector instance"""
         if detector_type == "isolation_forest":
-            return IsolationForest(
+            return IForest(
                 contamination=contamination,
                 random_state=self.random_state,
                 n_estimators=100,
