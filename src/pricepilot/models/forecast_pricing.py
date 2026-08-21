@@ -92,11 +92,9 @@ class ForecastPricingModel:
 
         def demand_function(price: float) -> float:
             """Demand at given price, adjusted for forecast"""
-            # Adjust intercept so demand at base_price equals forecasted_demand
-            intercept = forecasted_demand - elasticity * (base_price - base_price)
-            # intercept = forecasted_demand (since price - base_price = 0 at base)
-
             # Linear demand: Q = forecasted_demand + elasticity * (price - base_price)
+            # At price = base_price, demand = forecasted_demand
+            # For each $1 above base_price, demand changes by elasticity amount
             demand = forecasted_demand + elasticity * (price - base_price)
             return max(demand, 0)  # Ensure non-negative
 
