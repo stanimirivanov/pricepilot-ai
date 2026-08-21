@@ -81,8 +81,30 @@ class PricingPipeline:
 
         # MLflow tracker
         self.mlflow_tracker: MLflowTracker | None = None
+        self.mlflow_run: Any | None = None
 
         logger.info("PricingPipeline initialized")
+
+    @property
+    def data_df(self) -> pd.DataFrame:
+        """Get data as DataFrame, raising if not loaded"""
+        if self.data is None:
+            raise ValueError("Data not loaded. Call load_or_generate_data() first.")
+        return self.data
+
+    @property
+    def forecaster_fitted(self) -> StatsForecastForecaster:
+        """Get fitted forecaster, raising if not fitted"""
+        if self.forecaster is None:
+            raise ValueError("Forecaster not fitted. Call fit_models() first.")
+        return self.forecaster
+
+    @property
+    def anomaly_pricing_fitted(self) -> AnomalyAwarePricingModel:
+        """Get fitted anomaly pricing model, raising if not fitted"""
+        if self.anomaly_pricing is None:
+            raise ValueError("Models not fitted. Call fit_models() first.")
+        return self.anomaly_pricing
 
     def load_or_generate_data(self, regenerate: bool = False) -> pd.DataFrame:
         """
@@ -122,6 +144,8 @@ class PricingPipeline:
         if self.data is None:
             raise ValueError("Data not loaded. Call load_or_generate_data() first.")
 
+        data = self.data  # Local variable for type narrowing
+
         # Start MLflow run
         if self.enable_mlflow:
             from pricepilot.config.settings import Settings
@@ -140,13 +164,13 @@ class PricingPipeline:
             chains=self.config.elasticity_chains,
         )
         self.elasticity_model.fit(
-            prices=self.data["price"].values,
-            demand=self.data["quantity_sold"].values,
-            weather_features=self.data["is_sunny"].values,
+            prices=data["price"].values,
+            demand=data["quantity_sold"].values,
+            weather_features=data["is_sunny"].values,
             progressbar=False,
         )
 
-        if self.enable_mlflow and self.mlflow_tracker:
+        if self.enable_mlflow and self.mlflow_tracker and self.elasticity_model.results:
             self.mlflow_tracker.log_params(
                 {
                     "elasticity_mean": self.elasticity_model.results.posterior_mean,
@@ -158,8 +182,8 @@ class PricingPipeline:
         logger.info("Step 2: Fitting forecaster...")
         ts_data = pd.DataFrame(
             {
-                "ds": self.data["date"],
-                "y": self.data["quantity_sold"],
+                "ds": data["date"],
+                "y": data["quantity_sold"],
                 "unique_id": "car_wash",
             }
         )
@@ -176,7 +200,7 @@ class PricingPipeline:
         self.anomaly_detector = DemandAnomalyDetector(
             contamination=self.config.anomaly_contamination,
         )
-        self.anomaly_detector.fit(self.data["quantity_sold"].values)
+        self.anomaly_detector.fit(data["quantity_sold"].values)
 
         # Step 4: Create pricing model
         logger.info("Step 4: Creating pricing model...")
@@ -217,24 +241,26 @@ class PricingPipeline:
         """
         import time
 
-        if self.anomaly_pricing is None:
-            raise ValueError("Models not fitted. Call fit_models() first.")
+        # Use properties for type safety
+        anomaly_pricing = self.anomaly_pricing_fitted
+        forecaster = self.forecaster_fitted
+        data = self.data_df
 
         if current_price is None:
-            current_price = float(self.data["price"].iloc[-1])
+            current_price = float(data["price"].iloc[-1])
 
         start_time = time.time()
 
         # Generate forecast
-        forecast = self.forecaster.predict(steps=1)
+        forecast = forecaster.predict(steps=1)
         forecasted_demand = float(forecast.mean[0])
         demand_lower = float(forecast.lower[0])
         demand_upper = float(forecast.upper[0])
 
         # Check for anomaly
-        historical_demand = self.data["quantity_sold"].values[-30:]  # Last 30 days
+        historical_demand = data["quantity_sold"].values[-30:]
 
-        anomaly_result = self.anomaly_pricing.price_with_anomaly_check(
+        anomaly_result = anomaly_pricing.price_with_anomaly_check(
             current_price=current_price,
             historical_demand=historical_demand,
             forecasted_demand=forecasted_demand,
@@ -281,8 +307,9 @@ class PricingPipeline:
         current_price: float | None = None,
     ) -> list[PipelineResult]:
         """Get optimal prices for the next 7 days"""
+        data = self.data_df
         if current_price is None:
-            current_price = float(self.data["price"].iloc[-1])
+            current_price = float(data["price"].iloc[-1])
 
         results = []
         for day in range(7):
