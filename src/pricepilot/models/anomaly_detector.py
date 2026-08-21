@@ -1,6 +1,7 @@
 """Anomaly detection for demand patterns using PyOD"""
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 class AnomalyResult:
     """Container for anomaly detection results"""
 
-    dates: pd.DatetimeIndex
+    dates: pd.Index
     scores: np.ndarray
     labels: np.ndarray  # 1 = anomaly, 0 = normal
     threshold: float
@@ -38,7 +39,7 @@ class AnomalyResult:
             }
         )
 
-    def get_anomaly_dates(self) -> pd.DatetimeIndex:
+    def get_anomaly_dates(self) -> pd.Index:
         """Get dates where anomalies were detected"""
         return self.dates[self.labels == 1]
 
@@ -203,7 +204,7 @@ class DemandAnomalyDetector:
     def detect(
         self,
         demand: np.ndarray,
-        dates: pd.DatetimeIndex | None = None,
+        dates: pd.Index | None = None,
     ) -> AnomalyResult:
         """
         Detect anomalies in demand data
@@ -219,7 +220,7 @@ class DemandAnomalyDetector:
             raise ValueError("Detector not fitted. Call fit() first.")
 
         if dates is None:
-            dates = pd.DatetimeIndex([f"Day {i + 1}" for i in range(len(demand))])
+            dates = pd.RangeIndex(len(demand))
 
         # Create features
         features = self._create_features(demand)
@@ -234,7 +235,7 @@ class DemandAnomalyDetector:
         n_anomalies = int(np.sum(labels))
 
         result = AnomalyResult(
-            dates=pd.DatetimeIndex(dates),
+            dates=dates,
             scores=scores,
             labels=labels,
             threshold=self.threshold if self.threshold is not None else 0.0,
@@ -281,14 +282,14 @@ class DemandAnomalyDetector:
     def plot_anomalies(
         self,
         demand: np.ndarray,
-        dates: pd.DatetimeIndex | None = None,
+        dates: pd.Index | None = None,
         save_path: str | None = None,
     ) -> None:
         """Plot demand with anomalies highlighted"""
         import matplotlib.pyplot as plt
 
         if dates is None:
-            dates = pd.DatetimeIndex([f"Day {i + 1}" for i in range(len(demand))])
+            dates = pd.RangeIndex(len(demand))
 
         result = self.detect(demand, dates)
 
@@ -353,7 +354,7 @@ class AnomalyAwarePricingModel:
 
     def __init__(
         self,
-        pricing_model,
+        pricing_model: Any,
         anomaly_detector: DemandAnomalyDetector,
     ):
         """
