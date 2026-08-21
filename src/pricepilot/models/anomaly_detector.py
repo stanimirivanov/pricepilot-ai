@@ -111,10 +111,10 @@ class DemandAnomalyDetector:
             Feature matrix
         """
         n = len(demand)
-        features = []
+        features: list[np.ndarray] = []
 
         # Current value
-        features.append(demand)
+        features.append(np.asarray(demand, dtype=np.float64))
 
         # Rolling statistics with NaN handling
         for window in [3, 7, 14]:
@@ -123,45 +123,47 @@ class DemandAnomalyDetector:
                     pd.Series(demand)
                     .rolling(
                         window=window,
-                        min_periods=1,  # Prevents NaN
+                        min_periods=1,
                     )
                     .mean()
-                    .values
+                    .to_numpy(dtype=np.float64)
                 )
 
                 rolling_std = (
                     pd.Series(demand)
                     .rolling(
                         window=window,
-                        min_periods=1,  # Prevents NaN
+                        min_periods=1,
                     )
                     .std()
-                    .values
+                    .to_numpy(dtype=np.float64)
                 )
 
-                # Fill any remaining NaN (first element)
-                rolling_std = np.nan_to_num(rolling_std, nan=0.0)
+                # Fill NaN values (first element of std)
+                rolling_std = np.where(np.isnan(rolling_std), 0.0, rolling_std)
 
                 features.append(rolling_mean)
                 features.append(rolling_std)
 
                 # Difference from rolling mean
-                diff_from_mean = demand - rolling_mean
+                diff_from_mean = np.asarray(demand, dtype=np.float64) - rolling_mean
                 features.append(diff_from_mean)
 
         # Rate of change
         if n >= 2:
-            rate_of_change = np.diff(demand, prepend=demand[0])
+            rate_of_change = np.diff(np.asarray(demand, dtype=np.float64), prepend=float(demand[0]))
             features.append(rate_of_change)
 
         # Day of week (if available)
         if n >= 7:
-            day_of_week = np.arange(n) % 7
-            features.append(day_of_week.astype(float))
+            day_of_week = np.arange(n, dtype=np.float64) % 7
+            features.append(day_of_week)
 
         # Stack features and handle any remaining NaN
         feature_matrix = np.column_stack(features)
-        feature_matrix = np.nan_to_num(feature_matrix, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Final NaN cleanup
+        feature_matrix = np.where(np.isfinite(feature_matrix), feature_matrix, 0.0)
 
         return feature_matrix
 
@@ -186,9 +188,12 @@ class DemandAnomalyDetector:
         # Fit detector
         self.detector.fit(features_scaled)
 
-        # Calculate threshold
         scores = self.detector.decision_function(features_scaled)
-        self.threshold = np.percentile(scores, (1 - self.contamination) * 100)
+        scores_array = np.asarray(scores, dtype=np.float64)
+
+        # Calculate threshold
+        percentile_value = float((1 - self.contamination) * 100)
+        self.threshold = float(np.percentile(scores_array, percentile_value))
 
         self.is_fitted = True
         logger.info(f"Anomaly detector fitted. Threshold: {self.threshold:.3f}")
@@ -221,10 +226,10 @@ class DemandAnomalyDetector:
         features_scaled = self.scaler.transform(features)
 
         # Get anomaly scores
-        scores = self.detector.decision_function(features_scaled)
+        scores = np.asarray(self.detector.decision_function(features_scaled), dtype=np.float64)
 
         # Label anomalies
-        labels = self.detector.predict(features_scaled)
+        labels = np.asarray(self.detector.predict(features_scaled), dtype=np.int32)
 
         n_anomalies = int(np.sum(labels))
 
@@ -265,7 +270,7 @@ class DemandAnomalyDetector:
             raise ValueError("Detector not fitted. Call fit() first.")
 
         # Combine history with new value
-        combined = np.append(history, demand_value)
+        combined = np.append(np.asarray(history, dtype=np.float64), float(demand_value))
 
         # Detect anomalies in combined data
         result = self.detect(combined)
