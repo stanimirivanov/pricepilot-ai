@@ -115,7 +115,7 @@ class PriceOptimizer:
             x0,
             method="L-BFGS-B",
             bounds=bounds,
-            options={"maxiter": 100, "disp": False},
+            options={"maxiter": 100},
         )
 
         optimal_price = float(result.x[0])

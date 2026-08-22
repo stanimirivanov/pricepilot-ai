@@ -1,37 +1,44 @@
-"""Tests for review API"""
+"""Tests for review API using pytest-asyncio"""
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from pricepilot.api.main import app
 
 
 @pytest.fixture
-def client():
-    """Create test client"""
-    return TestClient(app)
+async def client():
+    """Create async test client"""
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
 
-def test_root(client):
+@pytest.mark.asyncio
+async def test_root(client):
     """Test root endpoint"""
-    response = client.get("/")
+    response = await client.get("/")
     assert response.status_code == 200
     data = response.json()
     assert "service" in data
     assert "endpoints" in data
 
 
-def test_health(client):
+@pytest.mark.asyncio
+async def test_health(client):
     """Test health endpoint"""
-    response = client.get("/health")
+    response = await client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
 
 
-def test_get_recommendation(client):
+@pytest.mark.asyncio
+async def test_get_recommendation(client):
     """Test getting recommendation"""
-    response = client.get("/recommendation")
+    response = await client.get("/recommendation")
     assert response.status_code == 200
     data = response.json()
 
@@ -41,10 +48,11 @@ def test_get_recommendation(client):
     assert "requires_review" in data
 
 
-def test_submit_override(client):
+@pytest.mark.asyncio
+async def test_submit_override(client):
     """Test submitting override"""
     # First get recommendation
-    rec_response = client.get("/recommendation")
+    rec_response = await client.get("/recommendation")
     assert rec_response.status_code == 200
     rec_data = rec_response.json()
 
@@ -56,7 +64,7 @@ def test_submit_override(client):
         "reviewer_name": "Test User",
     }
 
-    response = client.post("/override", json=override_data)
+    response = await client.post("/override", json=override_data)
     assert response.status_code == 200
     data = response.json()
 
@@ -65,20 +73,22 @@ def test_submit_override(client):
     assert data["status"] == "OVERRIDDEN"
 
 
-def test_submit_override_invalid_id(client):
+@pytest.mark.asyncio
+async def test_submit_override_invalid_id(client):
     """Test override with invalid recommendation ID"""
     override_data = {
         "recommendation_id": "invalid-id",
         "human_price": 18.50,
     }
 
-    response = client.post("/override", json=override_data)
+    response = await client.post("/override", json=override_data)
     assert response.status_code == 400
 
 
-def test_get_feedback(client):
+@pytest.mark.asyncio
+async def test_get_feedback(client):
     """Test getting feedback"""
-    response = client.get("/feedback")
+    response = await client.get("/feedback")
     assert response.status_code == 200
     data = response.json()
     assert "count" in data
