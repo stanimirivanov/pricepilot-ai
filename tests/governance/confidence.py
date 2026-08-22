@@ -54,13 +54,6 @@ class ConfidenceScorer:
         if abs(total_weight - 1.0) > 0.001:
             raise ValueError(f"Weights must sum to 1.0, got {total_weight}")
 
-        # Validate thresholds
-        if not (0 < medium_threshold < high_threshold < 1):
-            raise ValueError(
-                f"Invalid thresholds: must satisfy 0 < medium({medium_threshold}) "
-                f"< high({high_threshold}) < 1"
-            )
-
         self.high_threshold = high_threshold
         self.medium_threshold = medium_threshold
         self.forecast_weight = forecast_weight
@@ -278,14 +271,7 @@ class ConfidenceThresholds:
 
     @staticmethod
     def conservative() -> ConfidenceScorer:
-        """
-        Conservative thresholds (require high confidence for approval)
-
-        Use when:
-        - High risk tolerance is low
-        - Regulatory compliance required
-        - Limited historical data
-        """
+        """Conservative thresholds (require high confidence for approval)"""
         return ConfidenceScorer(
             high_threshold=0.95,
             medium_threshold=0.80,
@@ -293,14 +279,7 @@ class ConfidenceThresholds:
 
     @staticmethod
     def balanced() -> ConfidenceScorer:
-        """
-        Balanced thresholds (default)
-
-        Use when:
-        - Standard business conditions
-        - Moderate risk tolerance
-        - Established pricing models
-        """
+        """Balanced thresholds (default)"""
         return ConfidenceScorer(
             high_threshold=0.90,
             medium_threshold=0.70,
@@ -308,44 +287,8 @@ class ConfidenceThresholds:
 
     @staticmethod
     def aggressive() -> ConfidenceScorer:
-        """
-        Aggressive thresholds (approve with lower confidence)
-
-        Use when:
-        - High risk tolerance
-        - Experimental phase
-        - Quick iteration desired
-        """
+        """Aggressive thresholds (approve with lower confidence)"""
         return ConfidenceScorer(
             high_threshold=0.80,
             medium_threshold=0.60,
-        )
-
-    @staticmethod
-    def custom(
-        high_threshold: float,
-        medium_threshold: float,
-        forecast_weight: float = 0.40,
-        elasticity_weight: float = 0.40,
-        anomaly_weight: float = 0.20,
-    ) -> ConfidenceScorer:
-        """
-        Custom threshold configuration
-
-        Args:
-            high_threshold: Score >= this = HIGH confidence
-            medium_threshold: Score >= this = MEDIUM confidence
-            forecast_weight: Weight for forecast uncertainty
-            elasticity_weight: Weight for elasticity uncertainty
-            anomaly_weight: Weight for anomaly penalty
-
-        Returns:
-            Configured ConfidenceScorer
-        """
-        return ConfidenceScorer(
-            high_threshold=high_threshold,
-            medium_threshold=medium_threshold,
-            forecast_weight=forecast_weight,
-            elasticity_weight=elasticity_weight,
-            anomaly_weight=anomaly_weight,
         )
