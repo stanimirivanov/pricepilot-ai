@@ -1,7 +1,7 @@
 """Workflow definitions for governance using LangGraph 1.x"""
 
 from abc import ABC, abstractmethod
-from typing import Any, cast
+from typing import Any
 
 from langgraph.graph import StateGraph
 from loguru import logger
@@ -57,17 +57,17 @@ class BaseGovernanceWorkflow(ABC):
             initial_state = GovernanceState()
 
         try:
-            # Execute graph - LangGraph returns dict
-            result_dict = self.graph.invoke(initial_state)
+            # LangGraph returns dict-like or Pydantic model
+            result = self.graph.invoke(initial_state)
 
-            # Convert dict back to GovernanceState
-            if isinstance(result_dict, dict):
-                result_state = GovernanceState(**result_dict)
+            # Convert result to GovernanceState
+            if isinstance(result, GovernanceState):
+                self.state = result
+            elif isinstance(result, dict):
+                self.state = GovernanceState.from_dict(result)
             else:
-                result_state = cast(GovernanceState, result_dict)
+                self.state = GovernanceState.from_dict(dict(result))
 
-            # Update state
-            self.state = result_state
             self.state.transition_to(WorkflowState.COMPLETED)
             logger.info("Workflow completed successfully")
         except Exception as e:

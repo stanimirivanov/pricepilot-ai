@@ -1,10 +1,9 @@
 """State definitions for governance workflow"""
 
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-import pandas as pd
+from pydantic import BaseModel, Field
 
 
 class WorkflowState(str, Enum):
@@ -29,12 +28,11 @@ class ConfidenceLevel(str, Enum):
     LOW = "low"
 
 
-@dataclass
-class GovernanceState:
-    """State object for the governance workflow"""
+class GovernanceState(BaseModel):
+    """State for governance workflow (LangGraph compatible with Pydantic)"""
 
     # Data
-    historical_data: pd.DataFrame | None = None
+    historical_data: Any | None = None  # DataFrame not directly supported
     forecast_result: Any | None = None
 
     # Pricing
@@ -47,7 +45,7 @@ class GovernanceState:
     # Confidence
     confidence_score: float | None = None
     confidence_level: ConfidenceLevel | None = None
-    confidence_details: dict[str, float] = field(default_factory=dict)
+    confidence_details: dict[str, float] = Field(default_factory=dict)
 
     # Anomaly
     anomaly_detected: bool = False
@@ -66,30 +64,23 @@ class GovernanceState:
     final_price: float | None = None
 
     # Metadata
-    timestamp: pd.Timestamp | None = None
+    timestamp: str | None = None  # Use string for serialization
     execution_time: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert state to dictionary"""
-        return {
-            "current_state": self.current_state.value,
-            "previous_state": self.previous_state.value if self.previous_state else None,
-            "current_price": self.current_price,
-            "optimal_price": self.optimal_price,
-            "final_price": self.final_price,
-            "forecasted_demand": self.forecasted_demand,
-            "confidence_score": self.confidence_score,
-            "confidence_level": self.confidence_level.value if self.confidence_level else None,
-            "anomaly_detected": self.anomaly_detected,
-            "anomaly_status": self.anomaly_status,
-            "approved": self.approved,
-            "human_reviewed": self.human_reviewed,
-            "human_override_price": self.human_override_price,
-            "error_message": self.error_message,
-            "execution_time": self.execution_time,
-        }
 
     def transition_to(self, new_state: WorkflowState) -> None:
         """Transition to a new state"""
         self.previous_state = self.current_state
         self.current_state = new_state
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary"""
+        return self.model_dump()
+
+    def to_json(self) -> str:
+        """Convert to JSON string"""
+        return self.model_dump_json()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GovernanceState":
+        """Create from dictionary"""
+        return cls(**data)
