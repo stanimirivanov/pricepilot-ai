@@ -1,5 +1,7 @@
 """Simple workflow example for testing"""
 
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
 
@@ -39,32 +41,33 @@ class SimpleGovernanceWorkflow(BaseGovernanceWorkflow):
         graph.add_edge("approve", END)
         graph.add_edge("request_review", END)
 
-    def _ingest_data(self, state: GovernanceState) -> GovernanceState:
+    def _ingest_data(self, state: GovernanceState) -> dict[str, Any]:
         """Ingest data step"""
         logger.info("State: Ingest Data")
-        state.transition_to(WorkflowState.INGEST_DATA)
-        return state
+        return {"current_state": WorkflowState.INGEST_DATA.value}
 
-    def _forecast(self, state: GovernanceState) -> GovernanceState:
+    def _forecast(self, state: GovernanceState) -> dict[str, Any]:
         """Forecast step"""
         logger.info("State: Forecast")
-        state.transition_to(WorkflowState.FORECAST)
-        return state
+        return {"current_state": WorkflowState.FORECAST.value}
 
-    def _optimize(self, state: GovernanceState) -> GovernanceState:
+    def _optimize(self, state: GovernanceState) -> dict[str, Any]:
         """Optimize step"""
         logger.info("State: Optimize")
-        state.transition_to(WorkflowState.OPTIMIZE)
-        return state
+        return {"current_state": WorkflowState.OPTIMIZE.value}
 
-    def _check_confidence(self, state: GovernanceState) -> GovernanceState:
+    def _check_confidence(self, state: GovernanceState) -> dict[str, Any]:
         """Check confidence step"""
         logger.info("State: Check Confidence")
-        state.transition_to(WorkflowState.CHECK_CONFIDENCE)
-        # Set a default confidence for testing
+
+        # Explicitly type as Dict[str, Any]
+        updates: dict[str, Any] = {"current_state": WorkflowState.CHECK_CONFIDENCE.value}
+
+        # Set default confidence for testing if not provided
         if state.confidence_score is None:
-            state.confidence_score = 0.95
-        return state
+            updates["confidence_score"] = 0.95
+
+        return updates
 
     def _route_decision(self, state: GovernanceState) -> str:
         """Route based on confidence"""
@@ -72,16 +75,18 @@ class SimpleGovernanceWorkflow(BaseGovernanceWorkflow):
             return "approve"
         return "review"
 
-    def _approve(self, state: GovernanceState) -> GovernanceState:
+    def _approve(self, state: GovernanceState) -> dict[str, Any]:
         """Approve decision"""
         logger.info("State: Approved")
-        state.approved = True
-        state.transition_to(WorkflowState.APPROVED)
-        return state
+        return {
+            "approved": True,
+            "current_state": WorkflowState.APPROVED.value,
+        }
 
-    def _request_review(self, state: GovernanceState) -> GovernanceState:
+    def _request_review(self, state: GovernanceState) -> dict[str, Any]:
         """Request review"""
         logger.info("State: Request Review")
-        state.approved = False
-        state.transition_to(WorkflowState.REQUEST_REVIEW)
-        return state
+        return {
+            "approved": False,
+            "current_state": WorkflowState.REQUEST_REVIEW.value,
+        }

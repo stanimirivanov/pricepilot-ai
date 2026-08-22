@@ -1,6 +1,7 @@
 """Workflow definitions for governance using LangGraph 1.x"""
 
 from abc import ABC, abstractmethod
+from typing import Any, cast
 
 from langgraph.graph import StateGraph
 from loguru import logger
@@ -9,12 +10,12 @@ from pricepilot.governance.state import GovernanceState, WorkflowState
 
 
 class BaseGovernanceWorkflow(ABC):
-    """Abstract base class for governance workflow using LangGraph"""
+    """Base governance workflow using LangGraph"""
 
     def __init__(self):
         self.state = GovernanceState()
         self.history: list[GovernanceState] = []
-        self.graph = None
+        self.graph: Any | None = None  # Compiled graph
 
     def build_graph(self):
         """Build LangGraph state graph"""
@@ -48,16 +49,25 @@ class BaseGovernanceWorkflow(ABC):
         if self.graph is None:
             self.build_graph()
 
+        if self.graph is None:
+            raise RuntimeError("Failed to build graph")
+
         # Use provided state or create new
         if initial_state is None:
             initial_state = GovernanceState()
 
         try:
-            # Execute graph
-            result = self.graph.invoke(initial_state)
+            # Execute graph - LangGraph returns dict
+            result_dict = self.graph.invoke(initial_state)
+
+            # Convert dict back to GovernanceState
+            if isinstance(result_dict, dict):
+                result_state = GovernanceState(**result_dict)
+            else:
+                result_state = cast(GovernanceState, result_dict)
 
             # Update state
-            self.state = result
+            self.state = result_state
             self.state.transition_to(WorkflowState.COMPLETED)
             logger.info("Workflow completed successfully")
         except Exception as e:

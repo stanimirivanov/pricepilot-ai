@@ -16,11 +16,9 @@ def test_workflow_execute_high_confidence():
     """Test workflow with high confidence"""
     workflow = SimpleGovernanceWorkflow()
 
-    # Set initial state
     initial_state = GovernanceState()
     initial_state.confidence_score = 0.95
 
-    # Execute
     result = workflow.execute(initial_state)
 
     assert result.approved is True
@@ -32,11 +30,9 @@ def test_workflow_execute_low_confidence():
     """Test workflow with low confidence"""
     workflow = SimpleGovernanceWorkflow()
 
-    # Set initial state
     initial_state = GovernanceState()
     initial_state.confidence_score = 0.50
 
-    # Execute
     result = workflow.execute(initial_state)
 
     assert result.approved is False
