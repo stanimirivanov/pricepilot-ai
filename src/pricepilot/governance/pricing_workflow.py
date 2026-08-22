@@ -3,14 +3,16 @@
 import time
 from typing import Any
 
+import pandas as pd
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
 
 from pricepilot.governance.confidence import ConfidenceScorer
 from pricepilot.governance.state import ConfidenceLevel, GovernanceState, WorkflowState
 from pricepilot.governance.workflow import BaseGovernanceWorkflow
+from pricepilot.models.forecast_pricing import ForecastPricingResult
 from pricepilot.pipeline.config import PipelineConfig
-from pricepilot.pipeline.pricing_pipeline import PipelineResult, PricingPipeline
+from pricepilot.pipeline.pricing_pipeline import PricingPipeline
 
 
 class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
@@ -31,7 +33,7 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         super().__init__()
         self.pipeline = pipeline
         self.confidence_scorer = confidence_scorer or ConfidenceScorer()
-        self.pipeline_result: PipelineResult | None = None
+        self.pipeline_result: ForecastPricingResult | None = None
 
     def _add_nodes(self, graph: StateGraph) -> None:
         """Add nodes to the graph"""
@@ -51,7 +53,6 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         graph.add_edge("forecast", "optimize")
         graph.add_edge("optimize", "check_confidence")
 
-        # Conditional routing based on confidence
         graph.add_conditional_edges(
             "check_confidence",
             self._route_by_confidence,
@@ -70,19 +71,22 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         """Ingest data step"""
         logger.info("Step 1: Ingesting data")
         state.transition_to(WorkflowState.INGEST_DATA)
-        state.timestamp = __import__("pandas").Timestamp.now()
+        state.timestamp = pd.Timestamp.now().isoformat()  # Store as string
 
         # Ensure pipeline exists
         if self.pipeline is None:
             logger.info("Creating new pipeline...")
             self.pipeline = PricingPipeline(
                 config=PipelineConfig(),
-                enable_mlflow=False,  # Disable MLflow for workflow execution
+                enable_mlflow=False,
             )
             self.pipeline.load_or_generate_data()
             self.pipeline.fit_models()
 
-        state.historical_data = self.pipeline.data
+        # Store data reference (pipeline.data is DataFrame after load)
+        if self.pipeline.data is not None:
+            state.historical_data = self.pipeline.data
+
         return state
 
     def _forecast(self, state: GovernanceState) -> GovernanceState:
@@ -90,8 +94,11 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         logger.info("Step 2: Forecasting demand")
         state.transition_to(WorkflowState.FORECAST)
 
-        if self.pipeline is None or self.pipeline.forecaster is None:
-            raise ValueError("Pipeline forecaster not available")
+        if self.pipeline is None:
+            raise ValueError("Pipeline not available")
+
+        if self.pipeline.forecaster is None:
+            raise ValueError("Pipeline forecaster not fitted")
 
         # Generate forecast
         forecast = self.pipeline.forecaster.predict(steps=1)
@@ -111,12 +118,19 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         logger.info("Step 3: Optimizing price")
         state.transition_to(WorkflowState.OPTIMIZE)
 
-        if self.pipeline is None or self.pipeline.pricing_model is None:
-            raise ValueError("Pipeline pricing model not available")
+        if self.pipeline is None:
+            raise ValueError("Pipeline not available")
+
+        if self.pipeline.pricing_model is None:
+            raise ValueError("Pipeline pricing model not fitted")
+
+        if self.pipeline.data is None:
+            raise ValueError("Pipeline data not loaded")
 
         # Get current price
         if state.current_price is None:
-            state.current_price = float(self.pipeline.data["price"].iloc[-1])
+            data = self.pipeline.data  # Type narrowed
+            state.current_price = float(data["price"].iloc[-1])
 
         # Generate pricing result
         pricing_result = self.pipeline.pricing_model.price_for_tomorrow(
@@ -138,12 +152,21 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         logger.info("Step 4: Checking confidence")
         state.transition_to(WorkflowState.CHECK_CONFIDENCE)
 
-        if self.pipeline is None or self.pipeline.elasticity_model is None:
-            raise ValueError("Pipeline elasticity model not available")
+        if self.pipeline is None:
+            raise ValueError("Pipeline not available")
+
+        if self.pipeline.elasticity_model is None:
+            raise ValueError("Pipeline elasticity model not fitted")
+
+        elasticity_model = self.pipeline.elasticity_model
+
+        if elasticity_model.results is None:
+            raise ValueError("Elasticity model results not available")
 
         # Get elasticity statistics
-        elasticity_mean = self.pipeline.elasticity_model.results.posterior_mean
-        elasticity_std = self.pipeline.elasticity_model.results.posterior_std
+        elasticity_results = elasticity_model.results
+        elasticity_mean = elasticity_results.posterior_mean
+        elasticity_std = elasticity_results.posterior_std
 
         # Get forecast interval width
         if state.demand_interval:
@@ -218,21 +241,25 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         """Finalize step"""
         logger.info("Step 7: Finalizing decision")
         state.transition_to(WorkflowState.COMPLETED)
-        state.execution_time = (
-            time.time() - state.timestamp.timestamp() if state.timestamp else None
-        )
+
+        # Calculate execution time from timestamp string
+        if state.timestamp:
+            try:
+                start_time = pd.Timestamp(state.timestamp)
+                state.execution_time = time.time() - start_time.timestamp()
+            except (ValueError, TypeError):
+                state.execution_time = None
 
         logger.info("=" * 60)
         logger.info("GOVERNANCE WORKFLOW COMPLETED")
         logger.info("=" * 60)
-        logger.info(f"Final Price: ${state.final_price:.2f}")
+        logger.info(
+            f"Final Price: ${state.final_price:.2f}" if state.final_price else "No final price"
+        )
         logger.info(f"Approved: {state.approved}")
         logger.info(f"Human Reviewed: {state.human_reviewed}")
-        logger.info(
-            f"Confidence: {state.confidence_score:.3f}"
-            if state.confidence_score
-            else "No confidence score"
-        )
+        if state.confidence_score:
+            logger.info(f"Confidence: {state.confidence_score:.3f}")
         logger.info("=" * 60)
 
         return state

@@ -64,7 +64,7 @@ class GovernanceState(BaseModel):
     final_price: float | None = None
 
     # Metadata
-    timestamp: str | None = None  # Use string for serialization
+    timestamp: str | None = None  # Use ISO format string for serialization
     execution_time: float | None = None
 
     def transition_to(self, new_state: WorkflowState) -> None:
