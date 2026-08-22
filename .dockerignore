@@ -1,4 +1,3 @@
-# .dockerignore
 .git
 .gitignore
 .venv
@@ -15,5 +14,14 @@ mlruns/
 mlflow.db
 data/raw/*.csv
 data/processed/*
+data/feedback/*
 models/checkpoints/*
 .env
+.env.local
+logs/*
+htmlcov/
+.coverage
+*.pyo
+*.pyd
+.Python
+pip-wheel-metadata/
