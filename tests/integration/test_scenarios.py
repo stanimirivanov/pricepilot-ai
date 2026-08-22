@@ -45,7 +45,7 @@ class TestPricingScenarios:
         assert result.final_price > 0
 
     def test_high_uncertainty_scenario(self, setup_pipeline):
-        """Test pricing with high uncertainty"""
+        """Test pricing with high uncertainty (pending review)"""
         workflow = PricingGovernanceWorkflow(
             pipeline=setup_pipeline,
             confidence_scorer=ConfidenceScorer(high_threshold=0.99, medium_threshold=0.95),
@@ -53,9 +53,10 @@ class TestPricingScenarios:
 
         result = workflow.execute(GovernanceState())
 
-        # Should require review
+        # Should be pending review
         assert result.approved is False
         assert result.human_reviewed is True
+        assert result.current_state == WorkflowState.PENDING_REVIEW
 
     def test_human_override_scenario(self, setup_pipeline):
         """Test scenario with human override"""
@@ -71,6 +72,7 @@ class TestPricingScenarios:
 
         assert result.final_price == 19.99
         assert result.human_reviewed is True
+        assert result.current_state == WorkflowState.COMPLETED
 
     def test_complete_decision_log(self, setup_pipeline, tmp_path):
         """Test complete decision logging"""

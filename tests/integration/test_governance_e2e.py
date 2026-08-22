@@ -76,7 +76,7 @@ class TestGovernanceWorkflowE2E:
         assert result.confidence_score is not None
 
     def test_complete_workflow_low_confidence(self, governance_workflow):
-        """Test complete workflow with low confidence"""
+        """Test complete workflow with low confidence (pending review)"""
         # Force low confidence
         governance_workflow.confidence_scorer = ConfidenceScorer(
             high_threshold=0.99,
@@ -86,10 +86,53 @@ class TestGovernanceWorkflowE2E:
         # Execute
         result = governance_workflow.execute(GovernanceState())
 
+        # Validate - should be pending review
+        assert result.current_state == WorkflowState.PENDING_REVIEW
+        assert result.approved is False
+        assert result.human_reviewed is True
+        assert result.final_price is None
+
+    def test_complete_workflow_low_confidence_with_override(self, governance_workflow):
+        """Test low confidence workflow with human override"""
+        # Force low confidence
+        governance_workflow.confidence_scorer = ConfidenceScorer(
+            high_threshold=0.99,
+            medium_threshold=0.95,
+        )
+
+        # Create state with human override
+        state = GovernanceState()
+        state.human_override_price = 18.50
+
+        # Execute
+        result = governance_workflow.execute(state)
+
         # Validate
         assert result.current_state == WorkflowState.COMPLETED
         assert result.approved is False
         assert result.human_reviewed is True
+        assert result.final_price == 18.50
+
+    def test_complete_workflow_low_confidence_human_approves(self, governance_workflow):
+        """Test low confidence workflow where human approves AI suggestion"""
+        # Force low confidence
+        governance_workflow.confidence_scorer = ConfidenceScorer(
+            high_threshold=0.99,
+            medium_threshold=0.95,
+        )
+
+        # Create state with human notes (indicating approval)
+        state = GovernanceState()
+        state.human_notes = "Looks good, approve"
+
+        # Execute
+        result = governance_workflow.execute(state)
+
+        # Validate
+        assert result.current_state == WorkflowState.COMPLETED
+        assert result.approved is True
+        assert result.human_reviewed is True
+        assert result.final_price is not None
 
     def test_workflow_state_history(self, governance_workflow):
         """Test that state history is tracked"""
@@ -103,8 +146,11 @@ class TestGovernanceWorkflowE2E:
         history = governance_workflow.get_history()
         assert len(history) > 0
 
-        # Last state should be completed
-        assert history[-1].current_state == WorkflowState.COMPLETED
+        # Last state should be completed (or pending review for low confidence)
+        assert history[-1].current_state in [
+            WorkflowState.COMPLETED,
+            WorkflowState.PENDING_REVIEW
+        ]
 
 
 class TestFeedbackLoop:
