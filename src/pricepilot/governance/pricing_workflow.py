@@ -291,3 +291,16 @@ class WorkflowResult:
             "optimal_price": self.optimal_price,
             "execution_time": self.execution_time,
         }
+
+    def to_json_serializable(self) -> dict[str, Any]:
+        """Convert to JSON-serializable dictionary"""
+        result = self.to_dict()
+
+        # Convert any non-serializable values
+        for key, value in result.items():
+            if hasattr(value, "isoformat"):
+                result[key] = value.isoformat()
+            elif hasattr(value, "value"):
+                result[key] = value.value
+
+        return result

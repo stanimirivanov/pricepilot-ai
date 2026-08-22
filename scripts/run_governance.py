@@ -11,7 +11,7 @@ import click
 from loguru import logger
 
 from pricepilot.governance.confidence import ConfidenceThresholds
-from pricepilot.governance.pricing_workflow import PricingGovernanceWorkflow
+from pricepilot.governance.pricing_workflow import PricingGovernanceWorkflow, WorkflowResult
 from pricepilot.governance.state import GovernanceState
 from pricepilot.pipeline.config import PipelineConfig
 from pricepilot.pipeline.pricing_pipeline import PricingPipeline
@@ -62,35 +62,33 @@ def run_governance(
         initial_state.human_override_price = human_override
 
     # Execute workflow
-    result = workflow.execute(initial_state)
+    state = workflow.execute(initial_state)
+
+    # Create workflow result (serializable)
+    result = WorkflowResult(state)
+    result_dict = result.to_json_serializable()
 
     # Print result
     logger.info("\n" + "=" * 60)
     logger.info("GOVERNANCE DECISION")
     logger.info("=" * 60)
-    logger.info(f"Final Price:     ${result.final_price:.2f}")
-    logger.info(f"Approved:        {result.approved}")
-    logger.info(f"Human Reviewed:  {result.human_reviewed}")
-    logger.info(
-        f"Confidence:      {result.confidence_score:.3f}"
-        if result.confidence_score
-        else "Confidence: N/A"
-    )
-    logger.info(
-        f"Forecast Demand: {result.forecasted_demand:.0f}"
-        if result.forecasted_demand
-        else "No forecast"
-    )
-    logger.info("=" * 60)
+    if result.final_price:
+        logger.info(f"Final Price:     ${result.final_price:.2f}")
+        logger.info(f"Approved:        {result.approved}")
+        logger.info(f"Human Reviewed:  {result.human_reviewed}")
+    if result.confidence_score:
+        logger.info(f"Confidence:      {result.confidence_score:.3f}")
+    if result.forecasted_demand:
+        logger.info(f"Forecast Demand: {result.forecasted_demand:.0f}")
+        logger.info("=" * 60)
 
     # Save result
     if output:
-        result_dict = result.to_dict()
         with open(output, "w") as f:
             json.dump(result_dict, f, indent=2)
         logger.info(f"Result saved to {output}")
 
-    return result
+    return result_dict
 
 
 if __name__ == "__main__":
