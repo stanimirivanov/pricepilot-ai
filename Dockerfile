@@ -1,4 +1,6 @@
-# Build stage
+# Multi-stage build for PricePilot AI
+
+# ===== Build Stage =====
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -13,17 +15,15 @@ RUN apt-get update && apt-get install -y \
 # Install UV
 RUN pip install uv
 
-# Copy necessary files for dependency installation
+# Copy project files for dependency installation
 COPY pyproject.toml .
 COPY README.md .
-
-# --- ADDED: Copy source code so Hatchling can build the editable package layout ---
 COPY src/ src/
 
-# Install dependencies (and your project in editable mode)
+# Install dependencies
 RUN uv pip install --system -e .
 
-# Runtime stage
+# ===== Runtime Stage =====
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -37,11 +37,14 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code and other directories
+# Copy application code
 COPY src/ src/
 COPY scripts/ scripts/
 COPY configs/ configs/
-COPY data/ data/
+COPY README.md .
+
+# Create necessary directories
+RUN mkdir -p /app/data/raw /app/data/processed /app/data/feedback /app/models/checkpoints /app/logs
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
@@ -50,9 +53,14 @@ USER appuser
 # Set environment variables
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=docker
 
-# Create necessary directories
-RUN mkdir -p /app/data/raw /app/data/processed /app/models/checkpoints
+# Expose ports
+EXPOSE 8000 5000
 
-# Default command
-CMD ["python", "scripts/generate_data.py"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command (API server)
+CMD ["uvicorn", "pricepilot.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

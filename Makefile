@@ -1,4 +1,4 @@
-.PHONY: setup install dev test lint format typecheck generate-data pipeline check-mlflow clean docker-build docker-run
+.PHONY: setup install dev test lint format typecheck generate-data pipeline check-mlflow clean docker-build docker-up docker-down docker-build docker-logs docker-pipeline docker-clean
 
 # Setup project
 setup:
@@ -53,9 +53,31 @@ clean:
 	uv cache clean
 	uv run python scripts/clean.py
 
-# Docker
+# Docker: Build images
 docker-build:
-	docker build -t pricepilot-ai .
+	docker-compose build
 
-docker-run:
-	docker run -p 8000:8000 pricepilot-ai
+# Docker: Start services
+docker-up:
+	docker-compose up -d
+
+# Docker: Stop services
+docker-down:
+	docker-compose down
+
+# Docker: View logs
+docker-logs:
+	docker-compose logs -f api
+
+# Docker: Run pipeline once
+docker-pipeline:
+	docker-compose run --rm pipeline
+
+# Docker: Clean everything
+docker-clean:
+	docker-compose down -v
+	docker system prune -f
+
+# Docker: Full deployment (one command)
+docker-deploy:
+	./scripts/docker-run.sh
