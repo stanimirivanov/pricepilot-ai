@@ -69,6 +69,11 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra -q --strict-markers --strict-config"
 asyncio_mode = "auto"
+markers = [
+    "integration: Integration tests (may be slower)",
+    "security: Security validation tests",
+    "scenario: End-to-end scenario tests",
+]
 
 [tool.coverage.run]
 source = ["src/pricepilot"]

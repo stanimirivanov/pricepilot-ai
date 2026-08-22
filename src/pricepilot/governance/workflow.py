@@ -68,7 +68,10 @@ class BaseGovernanceWorkflow(ABC):
             else:
                 self.state = GovernanceState.from_dict(dict(result))
 
-            self.state.transition_to(WorkflowState.COMPLETED)
+            # Only transition to COMPLETED if not already PENDING
+            if self.state.current_state != WorkflowState.PENDING_REVIEW:
+                self.state.transition_to(WorkflowState.COMPLETED)
+
             logger.info("Workflow completed successfully")
         except Exception as e:
             self.state = initial_state
