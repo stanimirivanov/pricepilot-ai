@@ -16,6 +16,7 @@ class WorkflowState(str, Enum):
     APPROVED = "approved"
     REQUEST_REVIEW = "request_review"
     HUMAN_OVERRIDE = "human_override"
+    PENDING_REVIEW = "pending_review"
     COMPLETED = "completed"
     FAILED = "failed"
 

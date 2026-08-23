@@ -221,28 +221,48 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
         return state
 
     def _human_override(self, state: GovernanceState) -> GovernanceState:
-        """Human override step"""
-        logger.info("Step 6: Processing human override")
+        """
+        Human override step
+
+        Handles three cases:
+        1. Human provides override price → use it
+        2. Human provides notes (approves AI) → use AI price
+        3. No human input → pending review
+        """
+        logger.info("Step 6: Processing human review")
         state.transition_to(WorkflowState.HUMAN_OVERRIDE)
         state.human_reviewed = True
 
         if state.human_override_price is not None:
+            # Human provided an override price
             state.final_price = state.human_override_price
+            state.approved = False  # Overridden by human
             logger.info(f"Human override price: ${state.final_price:.2f}")
-        else:
-            # Human approved the AI suggestion
+        elif state.human_notes is not None:
+            # Human reviewed but didn't override (accepted AI suggestion)
             state.final_price = state.optimal_price
-            state.approved = True
+            state.approved = True  # Human approved
             logger.info(f"Human approved AI price: ${state.final_price:.2f}")
+        else:
+            # Pending - no human input yet
+            state.final_price = None  # No final price yet
+            state.approved = False  # Not approved yet
+            state.transition_to(WorkflowState.PENDING_REVIEW)
+            logger.warning("Decision pending human review")
 
         return state
 
     def _finalize(self, state: GovernanceState) -> GovernanceState:
         """Finalize step"""
         logger.info("Step 7: Finalizing decision")
-        state.transition_to(WorkflowState.COMPLETED)
 
-        # Calculate execution time from timestamp string
+        # Only mark completed if a decision was made
+        if state.final_price is not None:
+            state.transition_to(WorkflowState.COMPLETED)
+        else:
+            state.transition_to(WorkflowState.PENDING_REVIEW)
+
+        # Calculate execution time
         if state.timestamp:
             try:
                 start_time = pd.Timestamp(state.timestamp)
@@ -251,15 +271,20 @@ class PricingGovernanceWorkflow(BaseGovernanceWorkflow):
                 state.execution_time = None
 
         logger.info("=" * 60)
-        logger.info("GOVERNANCE WORKFLOW COMPLETED")
+        logger.info("GOVERNANCE WORKFLOW RESULT")
         logger.info("=" * 60)
-        logger.info(
-            f"Final Price: ${state.final_price:.2f}" if state.final_price else "No final price"
-        )
+
+        if state.final_price:
+            logger.info(f"Final Price: ${state.final_price:.2f}")
+        else:
+            logger.info("Final Price: PENDING REVIEW")
+
         logger.info(f"Approved: {state.approved}")
         logger.info(f"Human Reviewed: {state.human_reviewed}")
+
         if state.confidence_score:
             logger.info(f"Confidence: {state.confidence_score:.3f}")
+
         logger.info("=" * 60)
 
         return state
