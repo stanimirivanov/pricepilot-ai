@@ -69,6 +69,11 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra -q --strict-markers --strict-config"
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:mlflow",
+    "ignore::pydantic.PydanticDeprecatedSince20:mlflow",
+    "ignore::pydantic.PydanticDeprecatedSince212:mlflow",
+]
 markers = [
     "integration: Integration tests (may be slower)",
     "security: Security validation tests",

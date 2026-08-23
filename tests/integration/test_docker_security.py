@@ -2,11 +2,36 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
+
+
+def find_compose_file() -> Path | None:
+    """Find docker-compose file with either .yaml or .yml extension"""
+    for ext in [".yaml", ".yml"]:
+        path = Path(f"docker-compose{ext}")
+        if path.exists():
+            return path
+    return None
 
 
 class TestDockerSecurity:
     """Security tests for Docker configuration"""
+
+    def test_dockerfile_exists(self):
+        """Verify Dockerfile exists"""
+        dockerfile = Path("Dockerfile")
+        assert dockerfile.exists(), "Dockerfile not found in project root"
+
+    def test_docker_compose_exists(self):
+        """Verify docker-compose file exists (.yaml or .yml)"""
+        compose_file = find_compose_file()
+        assert compose_file is not None, "docker-compose.yaml or docker-compose.yml not found"
+
+    def test_dockerignore_exists(self):
+        """Verify .dockerignore exists"""
+        dockerignore = Path(".dockerignore")
+        assert dockerignore.exists(), ".dockerignore not found in project root"
 
     def test_dockerfile_non_root_user(self):
         """Verify non-root user is created and used"""
@@ -34,7 +59,11 @@ class TestDockerSecurity:
 
     def test_compose_volumes(self):
         """Verify volume mounts for persistence"""
-        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        compose_file = find_compose_file()
+        if compose_file is None:
+            pytest.skip("docker-compose file not found")
+
+        compose = yaml.safe_load(compose_file.read_text())
 
         for service_name in ["api", "pipeline"]:
             service = compose["services"].get(service_name, {})
@@ -43,14 +72,22 @@ class TestDockerSecurity:
 
     def test_compose_no_privileged(self):
         """Verify no privileged containers"""
-        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        compose_file = find_compose_file()
+        if compose_file is None:
+            pytest.skip("docker-compose file not found")
+
+        compose = yaml.safe_load(compose_file.read_text())
 
         for service_name, service in compose["services"].items():
             assert not service.get("privileged", False), f"{service_name} should not be privileged"
 
     def test_compose_healthchecks(self):
         """Verify health checks for services"""
-        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        compose_file = find_compose_file()
+        if compose_file is None:
+            pytest.skip("docker-compose file not found")
+
+        compose = yaml.safe_load(compose_file.read_text())
 
         for service_name in ["api", "mlflow"]:
             service = compose["services"].get(service_name, {})
@@ -58,7 +95,11 @@ class TestDockerSecurity:
 
     def test_dockerignore_no_secrets(self):
         """Verify .dockerignore excludes sensitive files"""
-        dockerignore = Path(".dockerignore").read_text()
+        dockerignore_file = Path(".dockerignore")
+        if not dockerignore_file.exists():
+            pytest.skip(".dockerignore not found")
+
+        dockerignore = dockerignore_file.read_text()
 
         sensitive_patterns = [".env", ".git", "*.pem", "*.key"]
         for pattern in sensitive_patterns:
@@ -70,7 +111,11 @@ class TestVolumePersistence:
 
     def test_data_volumes_defined(self):
         """Verify data volumes are defined"""
-        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        compose_file = find_compose_file()
+        if compose_file is None:
+            pytest.skip("docker-compose file not found")
+
+        compose = yaml.safe_load(compose_file.read_text())
 
         volumes = compose.get("volumes", {})
         assert "data" in volumes
@@ -79,7 +124,11 @@ class TestVolumePersistence:
 
     def test_api_data_volume(self):
         """Verify API mounts data volume"""
-        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+        compose_file = find_compose_file()
+        if compose_file is None:
+            pytest.skip("docker-compose file not found")
+
+        compose = yaml.safe_load(compose_file.read_text())
 
         api_service = compose["services"]["api"]
         volumes = api_service.get("volumes", [])

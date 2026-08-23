@@ -77,7 +77,7 @@ def test_workflow_execute_low_confidence(workflow):
     """Test workflow with low confidence (should request review)"""
     # Set very high thresholds to force review
     workflow.confidence_scorer = ConfidenceScorer(
-        high_threshold=0.99,  # Very high threshold to force review
+        high_threshold=0.99,
         medium_threshold=0.95,
     )
 
@@ -85,8 +85,11 @@ def test_workflow_execute_low_confidence(workflow):
 
     result = workflow.execute(initial_state)
 
-    assert result.current_state == WorkflowState.COMPLETED
-    assert result.human_reviewed is True or result.approved is False
+    # Should be pending review (no human input)
+    assert result.current_state == WorkflowState.PENDING_REVIEW
+    assert result.approved is False
+    assert result.human_reviewed is True
+    assert result.final_price is None
 
 
 def test_workflow_with_human_override(workflow):

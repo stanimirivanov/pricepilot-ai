@@ -7,7 +7,7 @@ import pytest
 
 from pricepilot.governance.confidence import ConfidenceScorer
 from pricepilot.governance.pricing_workflow import PricingGovernanceWorkflow
-from pricepilot.governance.state import GovernanceState
+from pricepilot.governance.state import GovernanceState, WorkflowState
 from pricepilot.pipeline.config import PipelineConfig
 from pricepilot.pipeline.pricing_pipeline import PricingPipeline
 
@@ -32,7 +32,7 @@ class TestPricingScenarios:
         return pipeline
 
     def test_normal_day_scenario(self, setup_pipeline):
-        """Test pricing on a normal day"""
+        """Test pricing on a normal day (high confidence)"""
         workflow = PricingGovernanceWorkflow(
             pipeline=setup_pipeline,
             confidence_scorer=ConfidenceScorer(high_threshold=0.50, medium_threshold=0.30),
@@ -43,6 +43,7 @@ class TestPricingScenarios:
         assert result.approved is True
         assert result.final_price is not None
         assert result.final_price > 0
+        assert result.current_state == WorkflowState.COMPLETED
 
     def test_high_uncertainty_scenario(self, setup_pipeline):
         """Test pricing with high uncertainty (pending review)"""
@@ -57,6 +58,7 @@ class TestPricingScenarios:
         assert result.approved is False
         assert result.human_reviewed is True
         assert result.current_state == WorkflowState.PENDING_REVIEW
+        assert result.final_price is None
 
     def test_human_override_scenario(self, setup_pipeline):
         """Test scenario with human override"""
@@ -73,6 +75,24 @@ class TestPricingScenarios:
         assert result.final_price == 19.99
         assert result.human_reviewed is True
         assert result.current_state == WorkflowState.COMPLETED
+        assert result.approved is False
+
+    def test_human_approval_scenario(self, setup_pipeline):
+        """Test scenario where human approves AI suggestion"""
+        workflow = PricingGovernanceWorkflow(
+            pipeline=setup_pipeline,
+            confidence_scorer=ConfidenceScorer(high_threshold=0.99, medium_threshold=0.95),
+        )
+
+        state = GovernanceState()
+        state.human_notes = "Approve this price"
+
+        result = workflow.execute(state)
+
+        assert result.human_reviewed is True
+        assert result.approved is True
+        assert result.current_state == WorkflowState.COMPLETED
+        assert result.final_price is not None
 
     def test_complete_decision_log(self, setup_pipeline, tmp_path):
         """Test complete decision logging"""
@@ -93,6 +113,7 @@ class TestPricingScenarios:
             "forecasted_demand": result.forecasted_demand,
             "optimal_price": result.optimal_price,
             "anomaly_status": result.anomaly_status,
+            "current_state": result.current_state.value,
         }
 
         # Save log
@@ -107,3 +128,4 @@ class TestPricingScenarios:
 
         assert loaded["final_price"] == result.final_price
         assert loaded["approved"] == result.approved
+        assert loaded["current_state"] == WorkflowState.COMPLETED.value
